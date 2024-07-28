@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML 即時預覽編輯器</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/codemirror.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/theme/moxer.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/addon/search/matchesonscrollbar.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            font-family: 'IBM Plex Sans JP', sans-serif;
+        }
+        .container-fluid {
+            height: 100%;
+            display: flex;
+            padding: 0;
+        }
+        #editor-container {
+            position: relative;
+            width: 50%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        #html-editor {
+            flex-grow: 1;
+            overflow: hidden;
+        }
+        #button-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #FFFFFF;
+            padding: 10px;
+            border-top: 2px solid #333;
+            z-index: 1000;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+        }
+        #preview {
+            width: 50%;
+            height: 100%;
+            border: none;
+        }
+        .CodeMirror {
+            height: 100%;
+        }
+        .gutter {
+            background-color: #FFFFFF;
+            border-left: 1.5px solid #333;
+            border-right: 1.5px solid #333;
+            position: relative;
+        }
+        .gutter.gutter-horizontal {
+            cursor: col-resize;
+            width: 20px;
+        }
+        .gutter.gutter-horizontal::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 40px;
+            background-color: #B5EAD6;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .gutter.gutter-horizontal:hover::after {
+            background-color: #95D6B6;
+        }
+        .left-group {
+            display: flex;
+            align-items: center;
+        }
+        .input-group {
+            position: relative;
+            margin-right: 10px;
+        }
+        .input-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #333;
+        }
+        #search-input {
+            width: 200px;
+            height: 40px;
+            padding: 0 10px 0 35px;
+            border: 1.5px solid #333;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        #search-input:focus {
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        }
+        #search-nav {
+            display: flex;
+            align-items: center;
+        }
+        .nav-button {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            border: 1.5px solid #333;
+            border-radius: 5px;
+            background-color: #FFFFFF;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .nav-button:hover {
+            background-color: #B5EAD6;
+        }
+        #search-count {
+            font-weight: 700;
+            color: #333;
+            margin: 0 10px;
+        }
+        #copy-btn, #refresh-btn {
+            height: 40px;
+            padding: 0 20px;
+            border: 1.5px solid #333;
+            border-radius: 5px;
+            background-color: #B5EAD6;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-weight: 700;
+            color: #333;
+            font-size: 16px;
+            white-space: nowrap;
+            margin-left: 10px;
+        }
+        #copy-btn:hover, #refresh-btn:hover {
+            background-color: #95D6B6;
+        }
+        .cm-searching {
+            background-color: #d3d3d3 !important;
+        }
+        .cm-searching-current {
+            background-color: #ffff00 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div id="editor-container">
+            <div id="html-editor"></div>
+            <div id="button-container">
+                <div class="left-group">
+                    <div class="input-group">
+                        <i class="fas fa-search input-icon"></i>
+                        <input id="search-input" type="text" placeholder="輸入搜尋內容...">
+                    </div>
+                    <div id="search-nav">
+                        <button id="prev-match" class="nav-button"><i class="fas fa-chevron-left"></i></button>
+                        <span id="search-count">0/0</span>
+                        <button id="next-match" class="nav-button"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                <div>
+                    <button id="refresh-btn"><i class="fas fa-sync-alt"></i> 重新整理</button>
+                    <button id="copy-btn">複製程式</button>
+                </div>
+            </div>
+        </div>
+        <iframe id="preview"></iframe>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/addon/search/search.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/addon/search/searchcursor.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/addon/scroll/annotatescrollbar.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/addon/search/matchesonscrollbar.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/split.js/1.6.0/split.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.8/clipboard.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            const editorState = {
+                html: ''
+            };
+
+            const htmlEditor = CodeMirror(document.getElementById('html-editor'), {
+                mode: 'xml',
+                lineNumbers: true,
+                theme: 'moxer',
+                value: editorState.html,
+                lineWrapping: true,
+                viewportMargin: Infinity
+            });
+
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
+            function updatePreview() {
+                const previewFrame = document.getElementById('preview');
+                const previewDoc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+
+                requestAnimationFrame(() => {
+                    previewDoc.open();
+                    previewDoc.write(editorState.html);
+                    previewDoc.close();
+                });
+            }
+
+            const debouncedUpdate = debounce(updatePreview, 100);
+
+            htmlEditor.on('change', (instance, changeObj) => {
+                if (changeObj.origin !== 'setValue') {
+                    editorState.html = instance.getValue();
+                    debouncedUpdate();
+                }
+            });
+
+            updatePreview();
+
+            window.addEventListener('resize', () => {
+                htmlEditor.refresh();
+            });
+
+            Split(['.container-fluid > div', '.container-fluid > iframe'], {
+                sizes: [50, 50],
+                minSize: 100,
+                gutterSize: 10,
+                cursor: 'col-resize',
+                onDragEnd: function() {
+                    htmlEditor.refresh();
+                    updatePreview();
+                }
+            });
+
+            // 搜索功能
+            let searchCursor = null;
+            let searchCount = 0;
+            let currentMatch = 0;
+            let marks = [];
+            let currentMark = null;
+
+            function clearMarks() {
+                marks.forEach(mark => mark.clear());
+                marks = [];
+                if (currentMark) {
+                    currentMark.clear();
+                    currentMark = null;
+                }
+            }
+
+            function performSearch() {
+                const searchTerm = $('#search-input').val();
+                clearMarks();
+
+                if (searchTerm === '') {
+                    $('#search-count').text('0/0');
+                    return;
+                }
+
+                searchCount = 0;
+                currentMatch = 0;
+                searchCursor = htmlEditor.getSearchCursor(searchTerm);
+
+                while (searchCursor.findNext()) {
+                    searchCount++;
+                    marks.push(htmlEditor.markText(searchCursor.from(), searchCursor.to(), {className: 'cm-searching'}));
+                }
+
+                updateSearchCount();
+
+                searchCursor = htmlEditor.getSearchCursor(searchTerm);
+                if (searchCursor.findNext()) {
+                    currentMatch = 1;
+                    highlightCurrentMatch();
+                    updateSearchCount();
+                }
+            }
+
+            function updateSearchCount() {
+                $('#search-count').text(`${currentMatch}/${searchCount}`);
+            }
+
+            function highlightCurrentMatch() {
+                if (currentMark) {
+                    currentMark.clear();
+                }
+                currentMark = htmlEditor.markText(searchCursor.from(), searchCursor.to(), {className: 'cm-searching-current'});
+                htmlEditor.setSelection(searchCursor.from(), searchCursor.to());
+                htmlEditor.scrollIntoView(searchCursor.from(), 20);
+            }
+
+            function nextMatch() {
+                if (searchCount === 0) return;
+                if (currentMatch < searchCount) {
+                    currentMatch++;
+                } else {
+                    currentMatch = 1;
+                    searchCursor = htmlEditor.getSearchCursor($('#search-input').val());
+                }
+                if (searchCursor.findNext()) {
+                    highlightCurrentMatch();
+                    updateSearchCount();
+                }
+            }
+
+            function prevMatch() {
+                if (searchCount === 0) return;
+                if (currentMatch > 1) {
+                    currentMatch--;
+                } else {
+                    currentMatch = searchCount;
+                    searchCursor = htmlEditor.getSearchCursor($('#search-input').val());
+                    while (searchCursor.findNext() && currentMatch > 1) {
+                        currentMatch--;
+                    }
+                }
+                if (searchCursor.findPrevious()) {
+                    highlightCurrentMatch();
+                    updateSearchCount();
+                }
+            }
+
+            $('#search-input').on('input', debounce(performSearch, 300));
+            $('#next-match').on('click', nextMatch);
+            $('#prev-match').on('click', prevMatch);
+
+            // 複製按鈕功能
+            var clipboard = new ClipboardJS('#copy-btn', {
+                text: function() {
+                    return htmlEditor.getValue();
+                }
+            });
+
+            clipboard.on('success', function(e) {
+                const originalText = $('#copy-btn').text();
+                $('#copy-btn').text('已複製');
+                setTimeout(() => {
+                    $('#copy-btn').text(originalText);
+                }, 1000);
+            });
+
+            clipboard.on('error', function(e) {
+                alert('複製失敗');
+            });
+
+            // 重新整理按鈕功能
+            $('#refresh-btn').on('click', function() {
+                const previewFrame = document.getElementById('preview');
+                
+                // 重新加載 iframe
+                previewFrame.src = 'about:blank';
+                
+                setTimeout(() => {
+                    const previewDoc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+                    previewDoc.open();
+                    previewDoc.write(editorState.html);
+                    previewDoc.close();
+                }, 50);
+
+                // 添加旋轉動畫效果
+                $(this).find('i').addClass('fa-spin');
+                setTimeout(() => {
+                    $(this).find('i').removeClass('fa-spin');
+                }, 1000);
+            });
+        });
+    </script>
+</body>
+</html>
